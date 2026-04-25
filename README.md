@@ -29,7 +29,13 @@
 
 ## 快速开始
 
-### 训练模型
+### 1. 安装依赖
+pip install torch tqdm
+
+### 2. 准备数据
+编辑 data.txt，放入你的训练语料（每段结尾加 <EOF>）
+
+### 3. 训练模型
 
 ```bash
 # 使用默认参数训练
@@ -55,7 +61,7 @@ python train_llm.py --data_path ./data.txt --save_model ./my_model.pt --save_voc
 - `--lr`: 学习率（默认 3e-4）
 - `--grad_clip`: 梯度裁剪阈值（默认 1.0）
 
-### 对话测试
+### 4. 对话测试
 
 ```bash
 # 使用启动脚本
@@ -71,7 +77,7 @@ python chat.py --model_path ./my_model.pt --vocab_path ./vocab.json
 - `--top_k`: Top-k 采样（默认 40）
 - `--top_p`: Top-p (Nucleus) 采样（默认 0.9）
 
-### 追加训练
+### 5. 追加训练
 
 当有新数据需要加入训练时，使用 `add.sh` 脚本：
 
