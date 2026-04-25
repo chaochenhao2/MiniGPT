@@ -30,7 +30,9 @@
 ## 快速开始
 
 ### 1. 安装依赖
+``` bash
 pip install torch tqdm
+```
 
 ### 2. 准备数据
 编辑 data.txt，放入你的训练语料（每段结尾加 <EOF>）
