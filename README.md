@@ -35,7 +35,7 @@ pip install torch tqdm
 ```
 
 ### 2. 准备数据
-编辑 data.txt，放入你的训练语料（每段结尾加 <EOF>）
+编辑 data.txt，放入你的训练语料（每段结尾加 <EOF> ）
 
 ### 3. 训练模型
 
