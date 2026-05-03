@@ -1,3 +1,4 @@
+This project includes an AI-driven mobile execution system based on OpenClaw.
 # MiniGPT
 
 从零实现的 Transformer 解码器语言模型，包含训练和推理脚本。
