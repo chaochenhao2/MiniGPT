@@ -1,18 +1,23 @@
 #!/bin/bash
 
 # MiniGPT 模型优化脚本
-# 用法: bash optimize.sh [light|medium|aggressive|benchmark|chat]
+# 用法: bash scripts/optimize.sh [light|medium|aggressive|benchmark|chat]
 
 set -e
 
-MODEL_PATH="./my_model.pt"
-VOCAB_PATH="./vocab.json"
-OPTIMIZED_MODEL="./model_optimized.pt"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+cd "$PROJECT_DIR"
+
+MODEL_PATH="./models/my_model.pt"
+VOCAB_PATH="./data/vocab.json"
+OPTIMIZED_MODEL="./models/model_optimized.pt"
 
 show_help() {
     echo "MiniGPT 模型优化脚本"
     echo ""
-    echo "用法: bash optimize.sh [命令]"
+    echo "用法: bash scripts/optimize.sh [命令]"
     echo ""
     echo "可用命令:"
     echo "  light       轻量级优化 (仅量化)"
@@ -23,13 +28,13 @@ show_help() {
     echo "  help        显示此帮助信息"
     echo ""
     echo "示例:"
-    echo "  bash optimize.sh medium"
-    echo "  bash optimize.sh chat"
+    echo "  bash scripts/optimize.sh medium"
+    echo "  bash scripts/optimize.sh chat"
 }
 
 optimize_light() {
     echo "=== 轻量级优化: 仅量化 ==="
-    python3 optimize.py \
+    python3 src/optimize.py \
         --model_path $MODEL_PATH \
         --vocab_path $VOCAB_PATH \
         --output_path $OPTIMIZED_MODEL \
@@ -37,12 +42,12 @@ optimize_light() {
     echo ""
     echo "优化完成! 模型保存至: $OPTIMIZED_MODEL"
     echo "使用以下命令测试优化后的模型:"
-    echo "  bash optimize.sh chat"
+    echo "  bash scripts/optimize.sh chat"
 }
 
 optimize_medium() {
     echo "=== 中级优化: 量化 + 剪枝 ==="
-    python3 optimize.py \
+    python3 src/optimize.py \
         --model_path $MODEL_PATH \
         --vocab_path $VOCAB_PATH \
         --output_path $OPTIMIZED_MODEL \
@@ -51,12 +56,12 @@ optimize_medium() {
     echo ""
     echo "优化完成! 模型保存至: $OPTIMIZED_MODEL"
     echo "使用以下命令测试优化后的模型:"
-    echo "  bash optimize.sh chat"
+    echo "  bash scripts/optimize.sh chat"
 }
 
 optimize_aggressive() {
     echo "=== 激进优化: 量化 + 剪枝 ==="
-    python3 optimize.py \
+    python3 src/optimize.py \
         --model_path $MODEL_PATH \
         --vocab_path $VOCAB_PATH \
         --output_path $OPTIMIZED_MODEL \
@@ -65,12 +70,12 @@ optimize_aggressive() {
     echo ""
     echo "优化完成! 模型保存至: $OPTIMIZED_MODEL"
     echo "使用以下命令测试优化后的模型:"
-    echo "  bash optimize.sh chat"
+    echo "  bash scripts/optimize.sh chat"
 }
 
 run_benchmark() {
     echo "=== 性能测试 ==="
-    python3 benchmark.py \
+    python3 src/benchmark.py \
         --model_path $MODEL_PATH \
         --vocab_path $VOCAB_PATH \
         --compare_levels
@@ -84,7 +89,7 @@ chat_optimized() {
     fi
 
     echo "启动优化模型对话 (启用KV Cache)..."
-    python3 chat.py \
+    python3 src/chat.py \
         --model_path $OPTIMIZED_MODEL \
         --vocab_path $VOCAB_PATH \
         --use_cache \

@@ -1,6 +1,38 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
-*.pt
-*.pth
+*.pyd
+.Python
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Model files
+models/*.pt
+models/*.pth
+models/*.onnx
+
+# Backup files
 *.bak
+*.backup
+*.old
+
+# Data files (keep vocab.json tracked)
+data/data_new.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

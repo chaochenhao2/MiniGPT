@@ -6,21 +6,28 @@
 
 ```
 .
-├── train_llm.py      # 模型训练脚本
-├── chat.py           # 交互式对话脚本（支持流式输出和KV Cache优化）
-├── quantize.py       # 模型量化模块
-├── prune.py          # 模型剪枝模块
-├── optimize.py       # 模型优化整合脚本
-├── benchmark.py      # 性能测试脚本
-├── vocab.json        # 词表文件
-├── my_model.pt       # 训练好的模型
-├── data.txt          # 训练语料
-├── data_new.txt      # 追加训练语料
-├── train.sh          # 训练启动脚本
-├── chat.sh           # 对话启动脚本
-├── add.sh            # 追加训练脚本
-├── update.sh         # 重新训练脚本
-└── optimize.sh       # 优化启动脚本
+├── src/                # 源码目录
+│   ├── train_llm.py    # 模型训练脚本
+│   ├── chat.py         # 交互式对话脚本（支持流式输出和KV Cache优化）
+│   ├── quantize.py     # 模型量化模块
+│   ├── prune.py        # 模型剪枝模块
+│   ├── optimize.py     # 模型优化整合脚本
+│   └── benchmark.py    # 性能测试脚本
+├── scripts/            # 脚本目录
+│   ├── train.sh        # 训练启动脚本
+│   ├── chat.sh         # 对话启动脚本
+│   ├── add.sh          # 追加训练脚本
+│   ├── update.sh       # 重新训练脚本
+│   └── optimize.sh     # 优化启动脚本
+├── data/               # 数据目录
+│   ├── data.txt        # 训练语料
+│   ├── data_new.txt    # 追加训练语料
+│   └── vocab.json      # 词表文件
+├── models/             # 模型目录
+│   └── my_model.pt     # 训练好的模型
+├── README.md
+├── LICENSE
+└── .gitignore
 ```
 
 ## 特性
@@ -36,47 +43,37 @@
 ## 快速开始
 
 ### 1. 安装依赖
-``` bash
+```bash
 pip install torch tqdm
 ```
 
 ### 2. 准备数据
-编辑 data.txt，放入你的训练语料（每段结尾加 `<EOF>` ）
+编辑 `data/data.txt`，放入你的训练语料（每段结尾加 `<EOF>`）
 
 ### 3. 训练模型
 
 ```bash
 # 使用默认参数训练
-bash train.sh
+bash scripts/train.sh
 
 # 或手动指定参数
-python train_llm.py --data_path ./data.txt --save_model ./my_model.pt --save_vocab ./vocab.json
+bash scripts/train.sh 5 16 64 0.0005
 ```
 
-训练参数可通过以下选项调整：
-- `--data_path`: 训练文本文件路径
-- `--save_model`: 模型保存路径
-- `--save_vocab`: 词表保存路径
-- `--vocab_path`: 已有词表路径（追加训练时使用）
-- `--seq_len`: 序列长度（默认 64）
-- `--batch_size`: 批次大小（默认 16）
-- `--epochs`: 训练轮数（默认 20）
-- `--d_model`: 嵌入维度（默认 256）
-- `--nhead`: 注意力头数（默认 8）
-- `--num_layers`: Transformer 层数（默认 4）
-- `--dim_ff`: 前馈网络维度（默认 1024）
-- `--dropout`: Dropout 比率（默认 0.1）
-- `--lr`: 学习率（默认 3e-4）
-- `--grad_clip`: 梯度裁剪阈值（默认 1.0）
+训练参数：
+- 参数1: epochs（默认 3）
+- 参数2: batch_size（默认 8）
+- 参数3: seq_len（默认 32）
+- 参数4: lr（默认 0.001）
 
 ### 4. 对话测试
 
 ```bash
 # 使用启动脚本
-bash chat.sh
+bash scripts/chat.sh
 
 # 或手动指定
-python chat.py --model_path ./my_model.pt --vocab_path ./vocab.json
+python3 src/chat.py --model_path ./models/my_model.pt --vocab_path ./data/vocab.json
 ```
 
 可选参数：
@@ -92,12 +89,12 @@ python chat.py --model_path ./my_model.pt --vocab_path ./vocab.json
 当有新数据需要加入训练时，使用 `add.sh` 脚本：
 
 ```bash
-bash add.sh
+bash scripts/add.sh
 ```
 
 该脚本会：
-1. 使用 `data_new.txt` 中的数据对模型进行追加训练
-2. 将新数据追加到 `data.txt` 并清空 `data_new.txt`
+1. 使用 `data/data_new.txt` 中的数据对模型进行追加训练
+2. 将新数据追加到 `data/data.txt` 并清空 `data/data_new.txt`
 3. 启动对话模式
 
 ### 重新训练
@@ -105,7 +102,7 @@ bash add.sh
 如果需要完全重新训练（删除已有模型和词表）：
 
 ```bash
-bash update.sh
+bash scripts/update.sh
 ```
 
 ## 边缘设备优化
@@ -124,32 +121,32 @@ bash update.sh
 
 ```bash
 # 轻量级优化 (仅量化)
-bash optimize.sh light
+bash scripts/optimize.sh light
 
 # 中级优化 (量化 + 剪枝)
-bash optimize.sh medium
+bash scripts/optimize.sh medium
 
 # 激进优化 (量化 + 剪枝)
-bash optimize.sh aggressive
+bash scripts/optimize.sh aggressive
 
 # 性能测试
-bash optimize.sh benchmark
+bash scripts/optimize.sh benchmark
 
 # 使用优化模型对话
-bash optimize.sh chat
+bash scripts/optimize.sh chat
 ```
 
 ### 单独使用优化模块
 
 ```bash
 # 模型量化
-python quantize.py --model_path ./my_model.pt --vocab_path ./vocab.json --output_path ./model_quantized.pt
+python3 src/quantize.py --model_path ./models/my_model.pt --vocab_path ./data/vocab.json --output_path ./models/model_quantized.pt
 
 # 模型剪枝
-python prune.py --model_path ./my_model.pt --vocab_path ./vocab.json --output_path ./model_pruned.pt --sparsity 0.3
+python3 src/prune.py --model_path ./models/my_model.pt --vocab_path ./data/vocab.json --output_path ./models/model_pruned.pt --sparsity 0.3
 
 # 性能测试
-python benchmark.py --model_path ./my_model.pt --vocab_path ./vocab.json --compare_levels
+python3 src/benchmark.py --model_path ./models/my_model.pt --vocab_path ./data/vocab.json --compare_levels
 ```
 
 ### 优化说明
@@ -176,7 +173,7 @@ python benchmark.py --model_path ./my_model.pt --vocab_path ./vocab.json --compa
 运行性能测试对比不同优化方案：
 
 ```bash
-python benchmark.py --model_path ./my_model.pt --vocab_path ./vocab.json --compare_levels
+python3 src/benchmark.py --model_path ./models/my_model.pt --vocab_path ./data/vocab.json --compare_levels
 ```
 
 测试内容包括：
