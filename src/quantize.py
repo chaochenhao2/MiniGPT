@@ -117,6 +117,7 @@ def quantize_model(model_path, vocab_path, output_path, method='dynamic'):
 
     checkpoint = {
         'model_state_dict': quantized_model.state_dict(),
+        'model_state_dict_original': model.state_dict(),
         'model_args': model_args,
         'quantized': True,
         'quantization_method': method

@@ -28,6 +28,7 @@ def optimize_light(model_path, vocab_path, output_path):
 
     checkpoint = {
         'model_state_dict': quantized_model.state_dict(),
+        'model_state_dict_original': model.state_dict(),
         'model_args': model_args,
         'quantized': True,
         'optimization_level': 'light'
@@ -54,6 +55,7 @@ def optimize_medium(model_path, vocab_path, output_path, sparsity=0.3):
 
     checkpoint = {
         'model_state_dict': quantized_model.state_dict(),
+        'model_state_dict_original': pruned_model.state_dict(),
         'model_args': model_args,
         'quantized': True,
         'pruned': True,
@@ -85,6 +87,7 @@ def optimize_aggressive(model_path, vocab_path, output_path, sparsity=0.5):
 
     checkpoint = {
         'model_state_dict': quantized_model.state_dict(),
+        'model_state_dict_original': pruned_model.state_dict(),
         'model_args': model_args,
         'quantized': True,
         'pruned': True,

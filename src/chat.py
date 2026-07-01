@@ -10,6 +10,29 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from train_llm import MiniGPT, CharTokenizer, generate_square_subsequent_mask
+from quantize import dynamic_quantization
+
+
+def manual_attention(x, k, v, attn_mask=None, nhead=8):
+    seq_len_q, batch_size, d_model = x.shape
+    seq_len_k = k.size(0)
+    head_dim = d_model // nhead
+
+    q = x.view(seq_len_q, batch_size, nhead, head_dim).permute(1, 2, 0, 3)
+    k_full = k.view(seq_len_k, batch_size, nhead, head_dim).permute(1, 2, 0, 3)
+    v_full = v.view(seq_len_k, batch_size, nhead, head_dim).permute(1, 2, 0, 3)
+
+    scale = math.sqrt(head_dim)
+    scores = torch.matmul(q, k_full.transpose(-2, -1)) / scale
+
+    if attn_mask is not None:
+        scores = scores + attn_mask.unsqueeze(0).unsqueeze(0)
+
+    attn_weights = F.softmax(scores, dim=-1)
+    attn_out = torch.matmul(attn_weights, v_full)
+
+    attn_out = attn_out.permute(2, 0, 1, 3).contiguous().view(seq_len_q, batch_size, d_model)
+    return attn_out
 
 
 class MiniGPTWithKVCache(nn.Module):
@@ -17,13 +40,11 @@ class MiniGPTWithKVCache(nn.Module):
         super().__init__()
         self.original_model = original_model
         self.kv_cache = {}
+        self.nhead = original_model.layers[0].self_attn.num_heads
 
     def forward(self, x, attn_mask=None, use_cache=False):
         if not use_cache:
             return self.original_model(x, attn_mask)
-
-        batch_size = x.size(1) if x.dim() > 1 else 1
-        seq_len = x.size(0)
 
         embedding = self.original_model.embedding(x) * math.sqrt(self.original_model.d_model)
         pos_encoding = self.original_model.pos_encoder(embedding)
@@ -31,54 +52,48 @@ class MiniGPTWithKVCache(nn.Module):
 
         for i, layer in enumerate(self.original_model.layers):
             layer_key = f'layer_{i}'
-            if use_cache and layer_key in self.kv_cache:
-                cached_kv = self.kv_cache[layer_key]
-                x, new_kv = layer_forward_with_cache(layer, x, attn_mask, cached_kv)
-                self.kv_cache[layer_key] = new_kv
+            has_cache = layer_key in self.kv_cache
+
+            if hasattr(layer.self_attn, 'in_proj_weight') and layer.self_attn.in_proj_weight is not None:
+                qkv_weight = layer.self_attn.in_proj_weight
+                d_model = x.size(-1)
+                q_weight = qkv_weight[:d_model]
+                k_weight = qkv_weight[d_model:2*d_model]
+                v_weight = qkv_weight[2*d_model:]
+
+                q = x @ q_weight.T
+                k_new = x @ k_weight.T
+                v_new = x @ v_weight.T
             else:
-                x, new_kv = layer_forward_with_cache(layer, x, attn_mask, None)
-                if use_cache:
-                    self.kv_cache[layer_key] = new_kv
+                q = x
+                k_new = x
+                v_new = x
+
+            if has_cache:
+                k_cache, v_cache = self.kv_cache[layer_key]
+                k = torch.cat([k_cache, k_new], dim=0)
+                v = torch.cat([v_cache, v_new], dim=0)
+            else:
+                k = k_new
+                v = v_new
+
+            if use_cache:
+                self.kv_cache[layer_key] = (k, v)
+
+            attn_out = manual_attention(x, k, v, attn_mask, self.nhead)
+            attn_out = layer.self_attn.out_proj(attn_out)
+
+            x = x + layer.dropout1(attn_out)
+            x = layer.norm1(x)
+            ff_out = layer.linear2(layer.dropout(F.relu(layer.linear1(x))))
+            x = x + layer.dropout2(ff_out)
+            x = layer.norm2(x)
 
         x = self.original_model.ln_final(x)
         return self.original_model.fc_out(x)
 
     def clear_cache(self):
         self.kv_cache = {}
-
-
-def layer_forward_with_cache(layer, x, attn_mask, cached_kv):
-    seq_len = x.size(0)
-
-    q = layer.self_attn.q_proj(x) if hasattr(layer.self_attn, 'q_proj') else layer.self_attn.in_proj_weight[:layer.self_attn.q_proj_weight.shape[0]] @ x.T if hasattr(layer.self_attn, 'in_proj_weight') else None
-
-    if cached_kv is not None:
-        k_cache, v_cache = cached_kv
-        k = layer.self_attn.k_proj(x) if hasattr(layer.self_attn, 'k_proj') else layer.self_attn.in_proj_weight[layer.self_attn.q_proj_weight.shape[0]:layer.self_attn.q_proj_weight.shape[0]*2] @ x.T if hasattr(layer.self_attn, 'in_proj_weight') else None
-        v = layer.self_attn.v_proj(x) if hasattr(layer.self_attn, 'v_proj') else layer.self_attn.in_proj_weight[layer.self_attn.q_proj_weight.shape[0]*2:] @ x.T if hasattr(layer.self_attn, 'in_proj_weight') else None
-
-        k = torch.cat([k_cache, k], dim=0) if k_cache is not None else k
-        v = torch.cat([v_cache, v], dim=0) if v_cache is not None else v
-
-        new_kv = (k, v)
-
-        if attn_mask is not None:
-            if attn_mask.size(0) != seq_len:
-                attn_mask = generate_square_subsequent_mask(seq_len, x.device)
-    else:
-        k = layer.self_attn.k_proj(x) if hasattr(layer.self_attn, 'k_proj') else layer.self_attn.in_proj_weight[layer.self_attn.q_proj_weight.shape[0]:layer.self_attn.q_proj_weight.shape[0]*2] @ x.T if hasattr(layer.self_attn, 'in_proj_weight') else None
-        v = layer.self_attn.v_proj(x) if hasattr(layer.self_attn, 'v_proj') else layer.self_attn.in_proj_weight[layer.self_attn.q_proj_weight.shape[0]*2:] @ x.T if hasattr(layer.self_attn, 'in_proj_weight') else None
-
-        new_kv = (k, v)
-
-    attn_out, _ = layer.self_attn(x, k, v, attn_mask=attn_mask)
-    x = x + layer.dropout1(attn_out)
-    x = layer.norm1(x)
-    ff_out = layer.linear2(layer.dropout(F.relu(layer.linear1(x))))
-    x = x + layer.dropout2(ff_out)
-    x = layer.norm2(x)
-
-    return x, new_kv
 
 
 def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-float('Inf')):
@@ -144,7 +159,7 @@ def generate_stream_optimized(model, tokenizer, prompt, max_len=100, temperature
     input_ids = torch.tensor(tokens, dtype=torch.long).unsqueeze(1).to(device)
 
     with torch.no_grad():
-        logits = model(input_ids, generate_square_subsequent_mask(input_ids.size(0), device), use_cache=False)
+        logits = model(input_ids, generate_square_subsequent_mask(input_ids.size(0), device), use_cache=True)
 
         next_token_logits = logits[-1, 0, :] / temperature
         filtered_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
@@ -159,7 +174,7 @@ def generate_stream_optimized(model, tokenizer, prompt, max_len=100, temperature
         clean_str = token_str.replace('<UNK>', '?')
         yield clean_str
 
-        current_token = next_token.unsqueeze(0).unsqueeze(1)
+        current_token = next_token.unsqueeze(1)
 
         for _ in range(max_len - 1):
             attn_mask = generate_square_subsequent_mask(1, device)
@@ -177,7 +192,7 @@ def generate_stream_optimized(model, tokenizer, prompt, max_len=100, temperature
             clean_str = token_str.replace('<UNK>', '?')
             yield clean_str
 
-            current_token = next_token.unsqueeze(0).unsqueeze(1)
+            current_token = next_token.unsqueeze(1)
 
     yield "\n"
 
@@ -191,8 +206,19 @@ def main(args):
 
     checkpoint = torch.load(args.model_path, map_location=device)
     model_args = checkpoint['model_args']
-    model = MiniGPT(**model_args).to(device)
-    model.load_state_dict(checkpoint['model_state_dict'])
+
+    if checkpoint.get('quantized', False):
+        print("检测到量化模型，重新应用量化...")
+        model = MiniGPT(**model_args).to(device)
+        if 'model_state_dict_original' in checkpoint:
+            model.load_state_dict(checkpoint['model_state_dict_original'])
+        else:
+            model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+        model = dynamic_quantization(model)
+        print("量化模型加载成功")
+    else:
+        model = MiniGPT(**model_args).to(device)
+        model.load_state_dict(checkpoint['model_state_dict'])
 
     old_pe = model.pos_encoder.pe
     old_max_len, d_model = old_pe.shape
