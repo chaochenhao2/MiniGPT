@@ -1,6 +1,21 @@
 #!/bin/bash
 
-# 对模型进行追加训练
+# MiniGPT 追加训练脚本
+# 用法: bash add.sh [optimize|no-optimize]
+
+set -e
+
+OPTIMIZE=${1:-optimize}
+
+echo "=== MiniGPT 追加训练 ==="
+
+if [ ! -f "./data_new.txt" ] || [ ! -s "./data_new.txt" ]; then
+    echo "错误: data_new.txt 不存在或为空"
+    echo "请先在 data_new.txt 中添加训练数据"
+    exit 1
+fi
+
+echo "[1/3] 使用新数据追加训练..."
 python3 train_llm.py \
   --data_path ./data_new.txt \
   --save_model ./my_model.pt \
@@ -11,20 +26,20 @@ python3 train_llm.py \
   --seq_len 32 \
   --lr 0.0001
 
-# 追加 data_new.txt 到 data.txt 并清空
-DATA_FILE="data.txt"
-NEW_DATA_FILE="data_new.txt"
+echo ""
+echo "[2/3] 合并数据..."
+cat ./data_new.txt >> ./data.txt
+> ./data_new.txt
+echo "数据已合并到 data.txt，data_new.txt 已清空"
 
-if [ -f "$NEW_DATA_FILE" ] && [ -s "$NEW_DATA_FILE" ]; then
-    cat "$NEW_DATA_FILE" >> "$DATA_FILE"
-    > "$NEW_DATA_FILE"
-    echo "已将 $NEW_DATA_FILE 的内容追加到 $DATA_FILE，并清空"
-elif [ -f "$NEW_DATA_FILE" ]; then
-    echo "提示：$NEW_DATA_FILE 为空，无需操作"
+echo ""
+if [ "$OPTIMIZE" = "optimize" ]; then
+    echo "[3/3] 优化模型并启动对话..."
+    bash optimize.sh medium
+    echo ""
+    echo "启动优化模型对话..."
+    bash chat.sh optimized
 else
-    echo "错误：$NEW_DATA_FILE 不存在"
-    exit 1
+    echo "[3/3] 启动对话..."
+    bash chat.sh
 fi
-
-# 启动对话
-bash chat.sh
