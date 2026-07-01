@@ -28,7 +28,7 @@ def dynamic_quantization(model):
     model_cpu = model.cpu()
     quantized_model = torch.quantization.quantize_dynamic(
         model_cpu,
-        {nn.Linear, nn.Embedding},
+        {nn.Linear},
         dtype=torch.qint8
     )
     return quantized_model
